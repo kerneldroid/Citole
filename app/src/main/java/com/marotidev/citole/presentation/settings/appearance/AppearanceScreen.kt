@@ -118,7 +118,8 @@ fun AppearanceScreen(
                         Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFfcbd00)), contentAlignment = Alignment.Center) {
                             Icon(painterResource(R.drawable.ic_palette), null, tint = Color(0xFF6d3a01), modifier = Modifier.size(22.dp))
                         }
-                    }
+                    },
+                    onClick = {}
                 )
             }
             item {

@@ -148,7 +148,8 @@ fun AboutScreen(navController: NavController) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
                         Icon(painterResource(R.drawable.ic_wand_stars), null, modifier = Modifier.size(20.dp))
                     }
-                }
+                },
+                onClick = {}
             )
             SegmentedListItem(
                 modifier = Modifier.padding(vertical = 1.dp),
@@ -160,7 +161,8 @@ fun AboutScreen(navController: NavController) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
                         Icon(painterResource(R.drawable.ic_info), null, modifier = Modifier.size(20.dp))
                     }
-                }
+                },
+                onClick = {}
             )
 
             Spacer(Modifier.height(16.dp))
