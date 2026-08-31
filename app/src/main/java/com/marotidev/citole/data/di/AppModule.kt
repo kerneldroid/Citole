@@ -1,0 +1,127 @@
+/*
+Copyright (C) <2026>  <Balint Maroti>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+*/
+
+package com.marotidev.citole.data.di
+
+import android.app.Application
+import androidx.room.Room
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.marotidev.citole.data.repository.AudioRepository
+import com.marotidev.citole.data.repository.DataStoreRepository
+import com.marotidev.citole.data.local.AppDatabase
+import com.marotidev.citole.data.service.AudioService
+import com.marotidev.citole.data.local.TrackPlayLogDao
+import com.marotidev.citole.data.repository.RecommendationRepository
+import com.marotidev.citole.data.repository.TrackLogRepository
+import com.marotidev.citole.data.state.PlaybackStateHolder
+import com.marotidev.citole.data.state.SearchQueryStateHolder
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+import androidx.room.RoomDatabase
+import com.marotidev.citole.data.local.MIGRATION_1_2
+import com.marotidev.citole.data.local.PlaylistDao
+import com.marotidev.citole.data.repository.PlaylistRepository
+
+@Module
+@InstallIn(SingletonComponent::class)
+class AppModule {
+
+    @Provides
+    @Singleton
+    fun provideAudioService() : AudioService {
+        return AudioService()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAudioRepository(audioService: AudioService, app: Application) : AudioRepository {
+        return AudioRepository(audioService, app)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDataStoreRepository(app: Application) : DataStoreRepository {
+        return DataStoreRepository(app)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSearchQueryStateHolder() : SearchQueryStateHolder {
+        return SearchQueryStateHolder()
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaybackStateHolder() : PlaybackStateHolder {
+        return PlaybackStateHolder()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(app: Application): AppDatabase {
+        return Room.databaseBuilder(
+            app,
+            AppDatabase::class.java,
+            "app-database"
+        )
+        .addMigrations(MIGRATION_1_2)
+        .addCallback(object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                db.execSQL(
+                    "INSERT INTO `PlaylistGroup` (`name`) VALUES ('Favorites')"
+                )
+            }
+        })
+        .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTrackPlayLogDao(database: AppDatabase): TrackPlayLogDao {
+        return database.trackPlayLogDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTrackLogRepository(trackPlayLogDao: TrackPlayLogDao) : TrackLogRepository {
+        return TrackLogRepository(trackPlayLogDao)
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaylistDap(database: AppDatabase): PlaylistDao {
+        return database.playlistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaylistRepository(playlistDao: PlaylistDao) : PlaylistRepository {
+        return PlaylistRepository(playlistDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideRecommendationRepository(trackLogRepository: TrackLogRepository, audioRepository: AudioRepository,
+            dataStoreRepository: DataStoreRepository) : RecommendationRepository {
+        return RecommendationRepository(trackLogRepository, audioRepository, dataStoreRepository)
+    }
+}
