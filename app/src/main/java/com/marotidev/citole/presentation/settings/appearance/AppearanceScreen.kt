@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -36,6 +35,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -133,12 +133,12 @@ fun AppearanceScreen(
                                 vm.setThemeMode(mode.id)
                             },
                             modifier = Modifier.weight(1f).height(56.dp),
-                            shapes = ToggleButtonDefaults.shapes(
+                            shapes = ToggleButtonShapes(
                                 shape = CircleShape,
                                 pressedShape = MaterialTheme.shapes.small,
                                 checkedShape = CircleShape
                             ),
-                            colors = ToggleButtonDefaults.toggleButtonColors(
+                            colors = ToggleButtonDefaults.colors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 checkedContainerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -233,8 +233,8 @@ fun AppearanceScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 vm.setPaletteStyle(idx)
                             },
-                            shapes = ToggleButtonDefaults.shapes(shape = RoundedCornerShape(16.dp), pressedShape = RoundedCornerShape(8.dp), checkedShape = RoundedCornerShape(24.dp)),
-                            colors = ToggleButtonDefaults.toggleButtonColors(
+                            shapes = ToggleButtonShapes(shape = RoundedCornerShape(16.dp), pressedShape = RoundedCornerShape(8.dp), checkedShape = RoundedCornerShape(24.dp)),
+                            colors = ToggleButtonDefaults.colors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer

@@ -80,7 +80,7 @@ fun FilterDialog(
                         checked = browseViewModel.showSongs,
                         onCheckedChange = { browseViewModel.setChipShowSongs(it) },
                         shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_music), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -91,7 +91,7 @@ fun FilterDialog(
                         checked = browseViewModel.showPodcasts,
                         onCheckedChange = { browseViewModel.setChipShowPodcasts(it) },
                         shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_podcast), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -102,7 +102,7 @@ fun FilterDialog(
                         checked = browseViewModel.showAudiobooks,
                         onCheckedChange = { browseViewModel.setChipShowAudiobooks(it)},
                         shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_book), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -113,7 +113,7 @@ fun FilterDialog(
                         checked = browseViewModel.showOther,
                         onCheckedChange = { browseViewModel.setChipShowOther(it) },
                         shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_unknown_document), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -133,7 +133,7 @@ fun FilterDialog(
                         checked = browseViewModel.selectedSortChip == SortChip.Name,
                         onCheckedChange = { browseViewModel.setSortChipSort(SortChip.Name) },
                         shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_sort_by_alpha), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -144,7 +144,7 @@ fun FilterDialog(
                         checked = browseViewModel.selectedSortChip == SortChip.Album,
                         onCheckedChange = { browseViewModel.setSortChipSort(SortChip.Album) },
                         shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_album), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -155,7 +155,7 @@ fun FilterDialog(
                         checked = browseViewModel.selectedSortChip == SortChip.Artist,
                         onCheckedChange = { browseViewModel.setSortChipSort(SortChip.Artist) },
                         shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_person), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -166,7 +166,7 @@ fun FilterDialog(
                         checked = browseViewModel.selectedSortChip == SortChip.DateAdded,
                         onCheckedChange = { browseViewModel.setSortChipSort(SortChip.DateAdded) },
                         shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_today), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -186,7 +186,7 @@ fun FilterDialog(
                         checked = !browseViewModel.reverseSortOrder,
                         onCheckedChange = { browseViewModel.onReverseSortOrderChanged(false) },
                         shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_arrow_down), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -195,7 +195,7 @@ fun FilterDialog(
                         checked = browseViewModel.reverseSortOrder,
                         onCheckedChange = { browseViewModel.onReverseSortOrderChanged(true) },
                         shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-                        colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                     ) {
                         Icon(painterResource(R.drawable.ic_arrow_up), contentDescription = null, modifier = Modifier.size(18.dp))

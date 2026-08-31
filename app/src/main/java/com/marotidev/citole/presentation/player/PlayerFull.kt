@@ -723,7 +723,7 @@ fun PlayerBottomBar(
                 playerViewModel.toggleFavorite()
             },
             shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-            colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
@@ -737,7 +737,7 @@ fun PlayerBottomBar(
                 playerViewModel.toggleRepeat()
             },
             shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-            colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
@@ -748,7 +748,7 @@ fun PlayerBottomBar(
             checked = false,
             onCheckedChange = { onOpenDialog() },
             shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-            colors = ToggleButtonDefaults.toggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            colors = ToggleButtonDefaults.colors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
