@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.marotidev.citole"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.marotidev.citole"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 39
         versionName = "0.3.4"
 
