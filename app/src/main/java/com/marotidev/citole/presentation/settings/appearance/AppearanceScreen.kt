@@ -1,7 +1,6 @@
 package com.marotidev.citole.presentation.settings.appearance
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -53,7 +53,6 @@ import androidx.navigation.NavController
 import com.marotidev.citole.R
 import com.marotidev.citole.ui.theme.CitoleColorSource
 import com.marotidev.citole.ui.theme.CitoleThemeMode
-import com.marotidev.citole.ui.theme.paletteStyleFromOrdinal
 import com.materialkolor.PaletteStyle
 import com.materialkolor.ktx.harmonize
 
@@ -113,18 +112,16 @@ fun AppearanceScreen(
                     modifier = Modifier.padding(vertical = 1.dp),
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
                     contentPadding = PaddingValues(16.dp),
-                    headlineContent = { Text("Theme mode", style = MaterialTheme.typography.titleSmall) },
+                    content = { Text("Theme mode", style = MaterialTheme.typography.titleSmall) },
                     supportingContent = { Text(when(themeMode){1->"Light always";2->"Dark always";else->"Follow system"}, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     leadingContent = {
                         Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFfcbd00)), contentAlignment = Alignment.Center) {
                             Icon(painterResource(R.drawable.ic_palette), null, tint = Color(0xFF6d3a01), modifier = Modifier.size(22.dp))
                         }
-                    },
-                    trailingContent = {}
+                    }
                 )
             }
             item {
-                // Citole signature : tri-toggle with expressive animation, inspired by GameHub but own layout
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(CitoleThemeMode.System to "System", CitoleThemeMode.Light to "Light", CitoleThemeMode.Dark to "Dark").forEach { (mode, label) ->
                         val selected = themeMode == mode.id
@@ -136,9 +133,9 @@ fun AppearanceScreen(
                             },
                             modifier = Modifier.weight(1f).height(56.dp),
                             shapes = ToggleButtonDefaults.shapes(
-                                shape = RoundedCornerShape(16.dp),
-                                pressedShape = RoundedCornerShape(8.dp),
-                                checkedShape = RoundedCornerShape(28.dp)
+                                shape = CircleShape,
+                                pressedShape = MaterialTheme.shapes.small,
+                                checkedShape = CircleShape
                             ),
                             colors = ToggleButtonDefaults.toggleButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -168,7 +165,7 @@ fun AppearanceScreen(
                             modifier = Modifier.padding(vertical = 1.dp),
                             shapes = ListItemDefaults.segmentedShapes(index = idx, count = 3),
                             contentPadding = PaddingValues(16.dp),
-                            headlineContent = { Text(title, style = MaterialTheme.typography.titleSmall) },
+                            content = { Text(title, style = MaterialTheme.typography.titleSmall) },
                             supportingContent = { Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             leadingContent = {
                                 val bg = when(id){
@@ -226,9 +223,8 @@ fun AppearanceScreen(
                 Text("PALETTE", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp))
             }
             item {
-                // Citole grouped plaques style - 7 style chips, own layout vs Tomato LazyRow
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    itemsIndexed(paletteOptions) { idx, (style, name) ->
+                    itemsIndexed(paletteOptions) { idx, (_, name) ->
                         val selected = paletteStyle == idx
                         ToggleButton(
                             checked = selected,
@@ -236,7 +232,7 @@ fun AppearanceScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 vm.setPaletteStyle(idx)
                             },
-                            shapes = ToggleButtonDefaults.shapes(shape = RoundedCornerShape(12.dp), pressedShape = RoundedCornerShape(8.dp), checkedShape = RoundedCornerShape(24.dp)),
+                            shapes = ToggleButtonDefaults.shapes(shape = RoundedCornerShape(16.dp), pressedShape = RoundedCornerShape(8.dp), checkedShape = RoundedCornerShape(24.dp)),
                             colors = ToggleButtonDefaults.toggleButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -255,7 +251,7 @@ fun AppearanceScreen(
                     modifier = Modifier.padding(vertical = 1.dp),
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                     contentPadding = PaddingValues(16.dp),
-                    headlineContent = { Text("Black theme (AMOLED)", style = MaterialTheme.typography.titleSmall) },
+                    content = { Text("Black theme (AMOLED)", style = MaterialTheme.typography.titleSmall) },
                     supportingContent = { Text("Pure black background in dark mode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     leadingContent = {
                         Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
@@ -276,7 +272,6 @@ fun AppearanceScreen(
             }
 
             item {
-                // preview plaque - Citole signature grouped plaque
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp)
                 ) {

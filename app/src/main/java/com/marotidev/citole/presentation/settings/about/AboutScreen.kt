@@ -74,7 +74,6 @@ fun AboutScreen(navController: NavController) {
             modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 12.dp).fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            // Hero plaque - Citole branding
             Box(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(24.dp),
                 contentAlignment = Alignment.Center
@@ -89,16 +88,14 @@ fun AboutScreen(navController: NavController) {
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kerneldroid/Citole"))
-                            context.startActivity(intent)
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kerneldroid/Citole")))
                         }) {
                             Icon(painterResource(R.drawable.ic_info), null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("GitHub")
                         }
                         FilledTonalButton(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kerneldroid/Citole/issues"))
-                            context.startActivity(intent)
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kerneldroid/Citole/issues")))
                         }) {
                             Icon(painterResource(R.drawable.ic_book), null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
@@ -115,7 +112,7 @@ fun AboutScreen(navController: NavController) {
                 modifier = Modifier.padding(vertical = 1.dp),
                 shapes = ListItemDefaults.segmentedShapes(0, 4),
                 contentPadding = PaddingValues(16.dp),
-                headlineContent = { Text("Developer", style = MaterialTheme.typography.titleSmall) },
+                content = { Text("Developer", style = MaterialTheme.typography.titleSmall) },
                 supportingContent = { Text("Balint Maroti — GPLv3", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingContent = {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
@@ -130,7 +127,7 @@ fun AboutScreen(navController: NavController) {
                 modifier = Modifier.padding(vertical = 1.dp),
                 shapes = ListItemDefaults.segmentedShapes(1, 4),
                 contentPadding = PaddingValues(16.dp),
-                headlineContent = { Text("License", style = MaterialTheme.typography.titleSmall) },
+                content = { Text("License", style = MaterialTheme.typography.titleSmall) },
                 supportingContent = { Text("GNU GPL v3 — open source", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingContent = {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer), contentAlignment = Alignment.Center) {
@@ -145,7 +142,7 @@ fun AboutScreen(navController: NavController) {
                 modifier = Modifier.padding(vertical = 1.dp),
                 shapes = ListItemDefaults.segmentedShapes(2, 4),
                 contentPadding = PaddingValues(16.dp),
-                headlineContent = { Text("Built with", style = MaterialTheme.typography.titleSmall) },
+                content = { Text("Built with", style = MaterialTheme.typography.titleSmall) },
                 supportingContent = { Text("Compose · M3 Expressive · Media3 · Room · Hilt · Coil", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingContent = {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
@@ -157,7 +154,7 @@ fun AboutScreen(navController: NavController) {
                 modifier = Modifier.padding(vertical = 1.dp),
                 shapes = ListItemDefaults.segmentedShapes(3, 4),
                 contentPadding = PaddingValues(16.dp),
-                headlineContent = { Text("Version", style = MaterialTheme.typography.titleSmall) },
+                content = { Text("Version", style = MaterialTheme.typography.titleSmall) },
                 supportingContent = { Text(pkg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingContent = {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {

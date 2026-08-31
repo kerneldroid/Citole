@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.toShape
@@ -88,6 +89,7 @@ fun getDistance(A: Point, B: Point) : Float {
     return sqrt((A.x - B.x).pow(2) + (A.y - B.y).pow(2))
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ArtworkCollage(hash: Int, artworkUris: List<Uri?>) {
 

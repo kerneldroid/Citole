@@ -27,6 +27,7 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import com.marotidev.citole.R
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MorphingClipImage(
     uri: Uri,
