@@ -41,33 +41,27 @@ object CitoleEngine {
         val rawJson: String
     )
 
-    companion object {
-        private val libLoaded = AtomicBoolean(false)
-        @Volatile private var libOk = false
-
-        init {
-            ensureLoaded()
-        }
-
-        private fun ensureLoaded() {
-            if (libLoaded.compareAndSet(false, true)) {
-                libOk = try {
-                    System.loadLibrary("citole_engine")
-                    true
-                } catch (_: UnsatisfiedLinkError) {
-                    false
-                } catch (_: SecurityException) {
-                    false
-                }
-            }
-        }
-
-        internal fun isLibOk(): Boolean = libOk
-    }
+    private val libLoaded = AtomicBoolean(false)
+    @Volatile private var libOk = false
 
     init {
-        isLibOk()
+        ensureLoaded()
     }
+
+    private fun ensureLoaded() {
+        if (libLoaded.compareAndSet(false, true)) {
+            libOk = try {
+                System.loadLibrary("citole_engine")
+                true
+            } catch (_: UnsatisfiedLinkError) {
+                false
+            } catch (_: SecurityException) {
+                false
+            }
+        }
+    }
+
+    private fun isLibOk(): Boolean = libOk
 
     @JvmName("isAvailable")
     @JvmStatic

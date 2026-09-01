@@ -366,41 +366,5 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
-    private inner class RustDelegatingCallback : MediaSession.Callback {
-        override fun onPlay(mediaSession: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            if (isRustActive) {
-                resumeWithEngine()
-                return 0
-            }
-            return super.onPlay(mediaSession, controller)
-        }
-
-        override fun onPause(mediaSession: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            if (isRustActive) {
-                pauseWithEngine()
-                return 0
-            }
-            return super.onPause(mediaSession, controller)
-        }
-
-        override fun onSeekTo(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            positionMs: Long
-        ): Int {
-            if (isRustActive) {
-                seekWithEngine(positionMs)
-                return 0
-            }
-            return super.onSeekTo(mediaSession, controller, positionMs)
-        }
-
-        override fun onStop(mediaSession: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            if (isRustActive) {
-                stopRust()
-                return 0
-            }
-            return super.onStop(mediaSession, controller)
-        }
-    }
+    private inner class RustDelegatingCallback : MediaSession.Callback
 }
