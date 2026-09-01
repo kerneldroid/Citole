@@ -115,8 +115,8 @@ fun AppearanceScreen(
                     content = { Text("Theme mode", style = MaterialTheme.typography.titleSmall) },
                     supportingContent = { Text(when(themeMode){1->"Light always";2->"Dark always";else->"Follow system"}, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     leadingContent = {
-                        Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFfcbd00)), contentAlignment = Alignment.Center) {
-                            Icon(painterResource(R.drawable.ic_palette), null, tint = Color(0xFF6d3a01), modifier = Modifier.size(22.dp))
+                        Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                            Icon(painterResource(R.drawable.ic_palette), null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
                         }
                     },
                     onClick = {}
@@ -169,13 +169,18 @@ fun AppearanceScreen(
                             content = { Text(title, style = MaterialTheme.typography.titleSmall) },
                             supportingContent = { Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             leadingContent = {
-                                val bg = when(id){
-                                    0 -> Color(0xFF3FDAEE).harmonize(MaterialTheme.colorScheme.primary, true)
-                                    1 -> Color(0xFF85B7FA).harmonize(MaterialTheme.colorScheme.primary, true)
+                                val container = when(id){
+                                    0 -> MaterialTheme.colorScheme.primaryContainer
+                                    1 -> MaterialTheme.colorScheme.secondaryContainer
                                     else -> Color(customColor)
                                 }
-                                Box(Modifier.size(40.dp).clip(CircleShape).background(bg), contentAlignment = Alignment.Center) {
-                                    Icon(painterResource(when(id){0->R.drawable.ic_wand_stars;1->R.drawable.ic_palette;else->R.drawable.ic_verified}), null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                val content = when(id){
+                                    0 -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    1 -> MaterialTheme.colorScheme.onSecondaryContainer
+                                    else -> Color.White
+                                }
+                                Box(Modifier.size(40.dp).clip(CircleShape).background(container), contentAlignment = Alignment.Center) {
+                                    Icon(painterResource(when(id){0->R.drawable.ic_wand_stars;1->R.drawable.ic_palette;else->R.drawable.ic_verified}), null, tint = content, modifier = Modifier.size(20.dp))
                                 }
                             },
                             trailingContent = {

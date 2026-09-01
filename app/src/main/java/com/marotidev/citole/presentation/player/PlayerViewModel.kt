@@ -47,6 +47,8 @@ import com.marotidev.citole.data.service.PlaybackService
 import com.marotidev.citole.data.repository.TrackLogRepository
 import com.marotidev.citole.data.state.PlaybackStateHolder
 import com.marotidev.citole.data.state.QueueItem
+import com.marotidev.citole.engine.CitoleEngine
+import com.marotidev.citole.engine.RustAudioPlayer
 import com.materialkolor.ktx.themeColor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +94,9 @@ class PlayerViewModel @Inject constructor(
     var progress by mutableLongStateOf(0L)
 
     private var player : MediaController? = null
+    private var rustPlayer: RustAudioPlayer? = null
+    private var useRust: Boolean = false
+    private var currentRustPath: String? = null
 
     var repeatMode by mutableIntStateOf(Player.REPEAT_MODE_OFF)
 
@@ -144,6 +149,22 @@ class PlayerViewModel @Inject constructor(
     }
 
     init {
+        rustPlayer = RustAudioPlayer(application).apply {
+            setOnCompletionListener {
+                viewModelScope.launch {
+                    val next = playbackStateHolder.currentIndex.value + 1
+                    if (next < playerQueue.value.size) {
+                        skipInQueue(next)
+                    } else if (generatedQueue.value.isNotEmpty()) {
+                        val item = generatedQueue.value.firstOrNull()
+                        if (item != null) skipToGeneratedInQueue(item)
+                    } else {
+                        playing = false
+                        stopProgressUpdate()
+                    }
+                }
+            }
+        }
         val sessionToken = SessionToken(
             application,
             ComponentName(application, PlaybackService::class.java)
@@ -153,7 +174,7 @@ class PlayerViewModel @Inject constructor(
             {
                 player = controllerFuture.get()
 
-                playing = player?.isPlaying ?: false
+                playing = if (useRust) rustPlayer?.isPlaying ?: false else player?.isPlaying ?: false
                 if (playing) {
                     startProgressUpdate()
                 }
@@ -162,6 +183,39 @@ class PlayerViewModel @Inject constructor(
             },
             MoreExecutors.directExecutor()
         )
+    }
+
+    private fun shouldUseRust(path: String): Boolean {
+        if (!CitoleEngine.isAvailable()) return false
+        val fmt = CitoleEngine.probeFormatSafe(path)
+        return RustAudioPlayer.canHandle(fmt, path, application)
+    }
+
+    private fun trackPath(track: AudioService.TrackData): String = track.uri.toString()
+
+    private fun playViaRust(path: String, index: Int): Boolean {
+        val ok = rustPlayer?.play(path) ?: false
+        if (ok) {
+            useRust = true
+            currentRustPath = path
+            playbackStateHolder.currentIndex.value = index
+            playbackStateHolder.currentlyPlaying.value = playerQueue.value.getOrNull(index)
+                ?: generatedQueue.value.getOrNull(index - playerQueue.value.size)
+            playing = true
+            startProgressUpdate()
+        }
+        return ok
+    }
+
+    private fun playViaExo(tracks: List<AudioService.TrackData>, startIndex: Int, startPosition: Long) {
+        useRust = false
+        rustPlayer?.stop()
+        val mediaItems = tracks.map { with(audioService) { it.toMediaItem() } }
+        player?.setMediaItems(mediaItems, startIndex, startPosition)
+        player?.prepare()
+        player?.play()
+        playing = true
+        startProgressUpdate()
     }
 
     private fun setupListeners() {
@@ -210,7 +264,7 @@ class PlayerViewModel @Inject constructor(
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (NonCancellable.isActive) {
-                progress = player?.currentPosition ?: 0
+                progress = if (useRust) rustPlayer?.currentPosition ?: 0L else player?.currentPosition ?: 0L
                 delay(500.milliseconds)
             }
         }
@@ -229,16 +283,23 @@ class PlayerViewModel @Inject constructor(
         } else {
             playbackStateHolder.queueId.value = givenQueueId
         }
-
         playbackStateHolder.playerQueue.update {
             tracks.map { track -> QueueItem(track) }
         }
-
-        val mediaItems = tracks.map { with(audioService) {it.toMediaItem()} }
-
-        player?.setMediaItems(mediaItems, startIndex, startPosition)
-        player?.prepare()
-        player?.play()
+        val startTrack = tracks.getOrNull(startIndex)
+        val startPath = startTrack?.let { trackPath(it) } ?: ""
+        if (startTrack != null && shouldUseRust(startPath)) {
+            val ok = playViaRust(startPath, startIndex)
+            if (ok) {
+                if (tracks.size > 1) {
+                    val mediaItems = tracks.map { with(audioService) { it.toMediaItem() } }
+                    try { player?.setMediaItems(mediaItems, startIndex, 0) } catch (_: Throwable) {}
+                }
+                if (startPosition > 0) rustPlayer?.seekTo(startPosition)
+                return
+            }
+        }
+        playViaExo(tracks, startIndex, startPosition)
     }
 
     fun addToQueue(track: AudioService.TrackData, index: Int = playerQueue.value.size) {
@@ -342,8 +403,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun skipInQueue(newIndex: Int) {
+        val item = playerQueue.value.getOrNull(newIndex) ?: generatedQueue.value.getOrNull(newIndex - playerQueue.value.size)
+        val path = item?.let { trackPath(it.track) } ?: ""
+        if (item != null && shouldUseRust(path)) {
+            val ok = playViaRust(path, newIndex)
+            if (ok) return
+        }
+        useRust = false
+        rustPlayer?.stop()
         player?.seekTo(newIndex, 0L)
         player?.play()
+        playing = true
+        startProgressUpdate()
     }
 
     fun skipToGeneratedInQueue(item: QueueItem) {
@@ -416,28 +487,56 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun togglePlayPause() {
-        if (player?.isPlaying == true) {
-            player?.pause()
+        if (useRust) {
+            if (rustPlayer?.isPlaying == true) {
+                rustPlayer?.pause()
+                playing = false
+                stopProgressUpdate()
+            } else {
+                rustPlayer?.resume()
+                playing = true
+                startProgressUpdate()
+            }
         } else {
-            player?.play()
+            if (player?.isPlaying == true) {
+                player?.pause()
+            } else {
+                player?.play()
+            }
         }
     }
 
     fun seekTo(position: Long) {
-        player?.seekTo(position)
+        if (useRust) {
+            rustPlayer?.seekTo(position)
+        } else {
+            player?.seekTo(position)
+        }
         progress = position
     }
 
     fun skipNext() {
-        if (player?.hasNextMediaItem() ?: false) {
-            player?.seekToNext()
-            progress =  0
+        if (useRust) {
+            val next = playbackStateHolder.currentIndex.value + 1
+            if (next < playerQueue.value.size || next < playerQueue.value.size + generatedQueue.value.size) skipInQueue(next)
+            progress = 0
+        } else {
+            if (player?.hasNextMediaItem() ?: false) {
+                player?.seekToNext()
+                progress = 0
+            }
         }
     }
 
     fun skipPrevious() {
-        player?.seekToPrevious()
-        progress =  0
+        if (useRust) {
+            val prev = (playbackStateHolder.currentIndex.value - 1).coerceAtLeast(0)
+            skipInQueue(prev)
+            progress = 0
+        } else {
+            player?.seekToPrevious()
+            progress = 0
+        }
     }
 
     fun dismissPlayer() {
@@ -445,19 +544,24 @@ class PlayerViewModel @Inject constructor(
             trackLogRepository.updateLogTimeValues(playbackStateHolder.queueId.value, trackId = it.track.id,
                 System.currentTimeMillis(), progress)
         }
-
         playbackStateHolder.playerQueue.update { emptyList() }
         playbackStateHolder.generatedQueue.update { emptyList() }
         progress = 0
         playbackStateHolder.currentIndex.value = 0
         playbackStateHolder.currentlyPlaying.value = null
-
+        useRust = false
+        currentRustPath = null
+        rustPlayer?.stop()
         player?.stop()
         player?.clearMediaItems()
+        stopProgressUpdate()
+        playing = false
     }
 
     override fun onCleared() {
         super.onCleared()
+        rustPlayer?.release()
+        rustPlayer = null
         player?.release()
     }
 }

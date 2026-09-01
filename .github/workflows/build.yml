@@ -46,6 +46,32 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v5
 
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Add Android targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+
+      - name: Install cargo-ndk
+        run: |
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
+
       - name: Build APK
         run: ./gradlew assembleDebug --build-cache --parallel --configuration-cache
         env:

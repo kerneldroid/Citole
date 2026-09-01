@@ -35,6 +35,8 @@ import com.marotidev.citole.R
 import com.marotidev.citole.data.repository.RecommendationRepository
 import com.marotidev.citole.data.repository.TrackLogRepository
 import com.marotidev.citole.data.state.PlaybackStateHolder
+import com.marotidev.citole.engine.CitoleEngine
+import com.marotidev.citole.engine.RustAudioPlayer
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +59,11 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var player: Player? = null
+    var rustPlayer: RustAudioPlayer? = null
+        private set
+    @Volatile var isRustActive: Boolean = false
+        private set
+    private var currentRustPath: String? = null
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -83,9 +90,24 @@ class PlaybackService : MediaSessionService() {
                 .also { it.setSmallIcon(R.drawable.ic_citole_inverse) }
         )
 
+        rustPlayer = RustAudioPlayer(this).apply {
+            setOnCompletionListener {
+                val nextIndex = (playbackStateHolder.currentIndex.value + 1)
+                if (nextIndex < playbackStateHolder.playerQueue.value.size + playbackStateHolder.generatedQueue.value.size) {
+                    val item = if (nextIndex < playbackStateHolder.playerQueue.value.size) playbackStateHolder.playerQueue.value[nextIndex]
+                    else playbackStateHolder.generatedQueue.value[nextIndex - playbackStateHolder.playerQueue.value.size]
+                    playTrackWithEngine(item.track.uri.toString(), nextIndex)
+                } else {
+                    playbackStateHolder.currentlyPlaying.value?.let {
+                        trackLogRepository.updateLogTimeValues(playbackStateHolder.queueId.value, it.track.id, System.currentTimeMillis(), durationMsForRust())
+                    }
+                }
+            }
+        }
+
         player = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
-            .setHandleAudioBecomingNoisy(true) //player pauses when switching playback devices
+            .setHandleAudioBecomingNoisy(true)
             .build()
 
         player?.let {
@@ -151,7 +173,83 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    fun shouldUseRust(path: String): Boolean {
+        if (!CitoleEngine.isAvailable()) return false
+        val fmt = CitoleEngine.probeFormatSafe(path)
+        return RustAudioPlayer.canHandle(fmt, path, this)
+    }
+
+    fun playTrackWithEngine(path: String, queueIndex: Int): Boolean {
+        val useRust = shouldUseRust(path)
+        return if (useRust) {
+            try {
+                (player as? ExoPlayer)?.pause()
+                isRustActive = true
+                currentRustPath = path
+                playbackStateHolder.currentIndex.value = queueIndex
+                playbackStateHolder.currentlyPlaying.value = when {
+                    queueIndex < playbackStateHolder.playerQueue.value.size -> playbackStateHolder.playerQueue.value[queueIndex]
+                    else -> {
+                        val gi = queueIndex - playbackStateHolder.playerQueue.value.size
+                        playbackStateHolder.generatedQueue.value.getOrNull(gi)
+                    }
+                }
+                val ok = rustPlayer?.play(path) ?: false
+                if (!ok) {
+                    isRustActive = false
+                    playViaExo(queueIndex)
+                    return false
+                }
+                true
+            } catch (_: Throwable) {
+                isRustActive = false
+                playViaExo(queueIndex)
+                false
+            }
+        } else {
+            isRustActive = false
+            rustPlayer?.stop()
+            playViaExo(queueIndex)
+            false
+        }
+    }
+
+    private fun playViaExo(index: Int) {
+        try {
+            player?.seekTo(index, 0)
+            player?.prepare()
+            player?.play()
+        } catch (_: Throwable) {}
+    }
+
+    fun pauseWithEngine() {
+        if (isRustActive) rustPlayer?.pause() else (player as? ExoPlayer)?.pause()
+    }
+
+    fun resumeWithEngine() {
+        if (isRustActive) rustPlayer?.resume() else (player as? ExoPlayer)?.play()
+    }
+
+    fun seekWithEngine(ms: Long) {
+        if (isRustActive) rustPlayer?.seekTo(ms) else player?.seekTo(ms)
+    }
+
+    fun stopRust() {
+        rustPlayer?.stop()
+        isRustActive = false
+        currentRustPath = null
+    }
+
+    fun isRustPlaying(): Boolean = isRustActive && (rustPlayer?.isPlaying == true)
+    fun rustPosition(): Long = rustPlayer?.currentPosition ?: 0L
+    fun rustDuration(): Long = rustPlayer?.duration ?: 0L
+    private fun durationMsForRust(): Long = rustPlayer?.duration ?: 0L
+
+    fun exoPlayer(): Player? = player
+
     override fun onDestroy() {
+        rustPlayer?.release()
+        rustPlayer = null
         mediaSession?.run {
             player.release()
             release()

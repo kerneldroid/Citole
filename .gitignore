@@ -35,3 +35,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Rust
+rust/target/
+rust/**/target/
+app/src/main/jniLibs/

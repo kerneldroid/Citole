@@ -39,30 +39,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.marotidev.citole.R
 import com.marotidev.citole.presentation.app.SettingsAboutViewDestination
 import com.marotidev.citole.presentation.app.SettingsAppearanceViewDestination
 import com.marotidev.citole.presentation.app.SettingsShuffleEngineViewDestination
-import com.marotidev.citole.presentation.app.SettingsViewDestination
-import com.materialkolor.ktx.harmonize
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsMainScreen(
     navController: NavController,
 ) {
-
-    val appearanceIconContainer = Color(0xFF3FDAEE).harmonize(other = MaterialTheme.colorScheme.primaryContainer, true)
-    val appearanceIconContent = Color(0xFF3FDAEE).harmonize(other = MaterialTheme.colorScheme.primary, true)
-
-    val shuffleEngineIconContainer = Color(0xFF85B7FA).harmonize(other = MaterialTheme.colorScheme.primaryContainer, true)
-    val shuffleEngineIconContent = Color(0xFF85B7FA).harmonize(other = MaterialTheme.colorScheme.primary, true)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -123,8 +112,8 @@ fun SettingsMainScreen(
                     Icon(
                         painter = painterResource(id = R.drawable.ic_palette),
                         contentDescription = "Palette",
-                        modifier = Modifier.background(appearanceIconContainer, CircleShape).padding(10.dp),
-                        tint = appearanceIconContent
+                        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape).padding(10.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             )
@@ -152,8 +141,8 @@ fun SettingsMainScreen(
                     Icon(
                         painter = painterResource(id = R.drawable.ic_wand_stars),
                         contentDescription = "Engine",
-                        modifier = Modifier.background(shuffleEngineIconContainer, CircleShape).padding(10.dp),
-                        tint = shuffleEngineIconContent
+                        modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, CircleShape).padding(10.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
             )

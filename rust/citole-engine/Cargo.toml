@@ -1,0 +1,21 @@
+[package]
+name = "citole-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lightweight pure-Rust audio engine for Citole — no FFmpeg, no libopus C"
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+symphonia = { version = "0.5", default-features = false, features = ["aac", "mp3", "flac", "vorbis", "isomp4", "wav", "ogg", "pcm", "mkv"] }
+opus-pure = "0.2"
+midly = { version = "0.5", default-features = false, features = ["alloc", "std"] }
+jni = { version = "0.21", features = ["invocation"] }
+anyhow = "1.0"
+thiserror = "2.0"
+
+[profile.release]
+inherits = "workspace.release"

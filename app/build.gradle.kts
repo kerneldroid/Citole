@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.marotidev.citole"
     compileSdk = 37
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.marotidev.citole"
@@ -44,6 +45,11 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
 }
 
 dependencies {
@@ -58,6 +64,7 @@ dependencies {
 
     //m3expressive
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons)
     implementation(libs.material)
     implementation(libs.androidx.compose.animation.core)
 
@@ -92,4 +99,32 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+val jniLibsDir = layout.projectDirectory.dir("src/main/jniLibs")
+val rustRootDir = rootProject.file("rust")
+val rustLocalDir = file("rust")
+
+tasks.register<Exec>("cargoBuild") {
+    notCompatibleWithConfigurationCache("Exec with external cargo process")
+    onlyIf { rustLocalDir.exists() || rustRootDir.exists() }
+    outputs.dir(jniLibsDir)
+    workingDir(rustRootDir)
+    commandLine(
+        "sh", "-c",
+        """
+        set -e
+        if command -v cargo-ndk >/dev/null 2>&1; then
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o ${'$'}PWD/../app/src/main/jniLibs build --release
+        else
+          cargo build --release --target aarch64-linux-android --manifest-path ${'$'}PWD/Cargo.toml
+          mkdir -p ${'$'}PWD/../app/src/main/jniLibs/arm64-v8a
+          cp ${'$'}PWD/target/aarch64-linux-android/release/libcitole_engine.so ${'$'}PWD/../app/src/main/jniLibs/arm64-v8a/ 2>/dev/null || true
+        fi
+        """.trimIndent()
+    )
+}
+
+tasks.named("preBuild") {
+    dependsOn("cargoBuild")
 }

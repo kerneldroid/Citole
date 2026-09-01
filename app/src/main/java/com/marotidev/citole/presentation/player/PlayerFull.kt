@@ -86,8 +86,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import android.content.Intent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -179,6 +183,7 @@ fun StatusBar(
     var menuExpanded by remember { mutableStateOf(false) }
     var artistSubExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -307,8 +312,17 @@ fun StatusBar(
                 ) {
                     DropdownMenuItem(
                         text = { Text("Share") },
-                        trailingIcon = { Icon(painterResource(R.drawable.ic_info), null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) },
-                        onClick = { menuExpanded = false }
+                        trailingIcon = { Icon(Icons.Rounded.Share, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) },
+                        onClick = {
+                            menuExpanded = false
+                            val shareText = "${track.title} — ${track.artists.joinToString(", ")}"
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                                putExtra(Intent.EXTRA_SUBJECT, track.title)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share"))
+                        }
                     )
                 }
             }
