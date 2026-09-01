@@ -1,11 +1,12 @@
-use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jbyteArray, jint, jstring};
 use jni::JNIEnv;
+use jni::objects::{JClass, JString};
+use jni::sys::{jboolean, jbyteArray, jint, jobject, jstring};
 
 use crate::decoder::decode_auto;
-use crate::format::{probe_bytes, probe_extension, Format};
+use crate::format::{Format, probe_bytes, probe_extension};
 use crate::midi::MidiFile;
 
+#[inline]
 fn format_ordinal(f: Format) -> jint {
     match f {
         Format::AacLc => 0,
@@ -24,10 +25,31 @@ fn format_ordinal(f: Format) -> jint {
     }
 }
 
-fn jstring_to_rust(env: &mut JNIEnv, s: &JString) -> Option<String> {
-    env.get_string(s).ok().map(|v| v.into())
+#[inline]
+fn jstring_to_rust(env: &JNIEnv, s: &JString) -> Option<String> {
+    if env.exception_check().unwrap_or(false) {
+        return None;
+    }
+    let js = unsafe { env.get_string_unchecked(s).ok()? };
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return None;
+    }
+    Some(js.into())
 }
 
+#[inline]
+fn new_java_string(env: &mut JNIEnv, s: &str) -> jstring {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
+    match env.new_string(s) {
+        Ok(v) => v.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[inline]
 fn probe_format_for_path(path: &str) -> Option<Format> {
     if let Ok(data) = read_head(path, 8192) {
         if let Some(f) = probe_bytes(&data) {
@@ -38,6 +60,7 @@ fn probe_format_for_path(path: &str) -> Option<Format> {
     probe_extension(ext)
 }
 
+#[inline]
 fn read_head(path: &str, n: usize) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     let mut f = std::fs::File::open(path)?;
@@ -47,10 +70,12 @@ fn read_head(path: &str, n: usize) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+#[inline]
 fn read_all(path: &str) -> std::io::Result<Vec<u8>> {
     std::fs::read(path)
 }
 
+#[inline]
 fn escape_json(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
     for c in s.chars() {
@@ -67,35 +92,54 @@ fn escape_json(s: &str) -> String {
     out
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "system" fn JNI_OnLoad(_vm: jni::JavaVM, _reserved: *mut std::ffi::c_void) -> jint {
     jni::sys::JNI_VERSION_1_6
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_isAvailable<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jboolean {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
+    1 as jboolean
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_probeFormat<'local>(
-    mut env: JNIEnv<'local>,
+    env: JNIEnv<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
 ) -> jint {
-    let Some(p) = jstring_to_rust(&mut env, &path) else {
+    let Some(p) = jstring_to_rust(&env, &path) else {
         return -1;
     };
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return -1;
+    }
     match probe_format_for_path(&p) {
         Some(f) => format_ordinal(f),
         None => -1,
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_decodeToPcm<'local>(
-    mut env: JNIEnv<'local>,
+    env: JNIEnv<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
 ) -> jbyteArray {
-    let Some(p) = jstring_to_rust(&mut env, &path) else {
+    let Some(p) = jstring_to_rust(&env, &path) else {
         return std::ptr::null_mut();
     };
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return std::ptr::null_mut();
+    }
     let data = match read_all(&p) {
         Ok(d) => d,
         Err(_) => return std::ptr::null_mut(),
@@ -104,37 +148,70 @@ pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_decodeToPcm
         Ok(v) => v,
         Err(_) => return std::ptr::null_mut(),
     };
-    let i16s = pcm.to_i16_interleaved();
-    let mut bytes = Vec::with_capacity(i16s.len() * 2);
-    for s in i16s {
-        bytes.extend_from_slice(&s.to_le_bytes());
-    }
+    let bytes = pcm.to_le_bytes();
     match env.byte_array_from_slice(&bytes) {
         Ok(arr) => arr.into_raw(),
         Err(_) => std::ptr::null_mut(),
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_decodeToPcmDirect<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+) -> jobject {
+    let Some(p) = jstring_to_rust(&env, &path) else {
+        return std::ptr::null_mut();
+    };
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return std::ptr::null_mut();
+    }
+    let data = match read_all(&p) {
+        Ok(d) => d,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let pcm = match decode_auto(&data) {
+        Ok(v) => v,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let bytes = pcm.to_le_bytes();
+    if bytes.is_empty() {
+        return std::ptr::null_mut();
+    }
+    let len = bytes.len();
+    let leaked = Box::leak(bytes.into_boxed_slice());
+    let ptr = leaked.as_mut_ptr();
+    match unsafe { env.new_direct_byte_buffer(ptr, len) } {
+        Ok(buf) => buf.into_raw(),
+        Err(_) => {
+            unsafe {
+                let _ = Box::from_raw(leaked as *mut [u8]);
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_marotidev_citole_engine_CitoleEngine_getInfo<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
 ) -> jstring {
-    let Some(p) = jstring_to_rust(&mut env, &path) else {
-        let s = r#"{"error":"invalid path","ordinal":-1}"#;
-        return match env.new_string(s) {
-            Ok(v) => v.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        };
+    let Some(p) = jstring_to_rust(&env, &path) else {
+        return new_java_string(&mut env, r#"{"error":"invalid path","ordinal":-1}"#);
     };
-    let json = build_info_json(&p);
-    match env.new_string(json) {
-        Ok(v) => v.into_raw(),
-        Err(_) => std::ptr::null_mut(),
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return new_java_string(&mut env, r#"{"error":"jni exception","ordinal":-1}"#);
     }
+    let json = build_info_json(&p);
+    new_java_string(&mut env, &json)
 }
 
+#[inline]
 fn build_info_json(path: &str) -> String {
     let head = read_head(path, 8192).unwrap_or_default();
     let fmt_opt = probe_bytes(&head).or_else(|| {
@@ -179,7 +256,7 @@ fn build_info_json(path: &str) -> String {
                 fmt_str,
                 ordinal,
                 escape_json(&e.to_string())
-            )
+            );
         }
     };
     match decode_auto(&data) {
@@ -209,8 +286,3 @@ fn build_info_json(path: &str) -> String {
         }
     }
 }
-
-#[allow(unused_imports)]
-use jni::sys::jobject as _jobject_keep;
-#[allow(unused_imports)]
-use JByteArray as _JByteArray_keep;

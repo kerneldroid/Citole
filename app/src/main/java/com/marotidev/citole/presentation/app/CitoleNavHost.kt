@@ -18,9 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package com.marotidev.citole.presentation.app
 
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -46,7 +48,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -180,6 +185,38 @@ fun CitoleNavHost(
     var selectedPage by remember { mutableStateOf(Page.ForYou) }
 
     val scope = rememberCoroutineScope()
+    var predictiveProgress by remember { mutableFloatStateOf(0f) }
+
+    PredictiveBackHandler(enabled = drawerState.isOpen) { progress ->
+        try {
+            progress.collect { event -> predictiveProgress = event.progress }
+            scope.launch { drawerState.close() }
+        } finally {
+            predictiveProgress = 0f
+        }
+    }
+
+    PredictiveBackHandler(enabled = !drawerState.isOpen && navController.previousBackStackEntry != null) { progress ->
+        try {
+            progress.collect { event -> predictiveProgress = event.progress }
+            if (navController.previousBackStackEntry != null) navController.popBackStack()
+        } finally {
+            predictiveProgress = 0f
+        }
+    }
+
+    PredictiveBackHandler(enabled = !drawerState.isOpen && navController.previousBackStackEntry == null && selectedPage != Page.ForYou) { progress ->
+        val previous = selectedPage
+        try {
+            progress.collect { event -> predictiveProgress = event.progress }
+            selectedPage = Page.ForYou
+        } catch (_: Exception) {
+            selectedPage = previous
+            predictiveProgress = 0f
+        } finally {
+            predictiveProgress = 0f
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -263,12 +300,22 @@ fun CitoleNavHost(
             }
         },
     ) {
+        val predictiveScale by animateFloatAsState(
+            targetValue = 1f - predictiveProgress * 0.06f,
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = 0.85f)
+        )
+        val predictiveAlpha by animateFloatAsState(
+            targetValue = 1f - predictiveProgress * 0.15f,
+            animationSpec = spring(stiffness = Spring.StiffnessMedium)
+        )
         Box (
-            modifier = Modifier.pointerInput(Unit) {
-                detectTapGestures(onTap = {
-                    focusManager.clearFocus()
-                })
-            }
+            modifier = Modifier
+                .graphicsLayer(scaleX = predictiveScale, scaleY = predictiveScale, alpha = predictiveAlpha)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                }
         ){
 
             NavHost(

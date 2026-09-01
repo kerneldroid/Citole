@@ -9,7 +9,7 @@ plugins {
 android {
     namespace = "com.marotidev.citole"
     compileSdk = 37
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.marotidev.citole"
@@ -48,6 +48,11 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }

@@ -2,12 +2,16 @@ package com.marotidev.citole.engine
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.PlaybackParams
 import android.net.Uri
+import android.os.Build
 import android.os.ConditionVariable
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
@@ -15,7 +19,7 @@ import kotlin.concurrent.thread
 class RustAudioPlayer(private val context: Context) {
 
     companion object {
-        const val MAX_RUST_FILE_BYTES: Long = 32L * 1024L * 1024L
+        const val MAX_RUST_FILE_BYTES: Long = 64L * 1024L * 1024L
         private const val CHUNK_BYTES = 8192
 
         fun canHandle(format: CitoleEngine.Format): Boolean {
@@ -71,6 +75,7 @@ class RustAudioPlayer(private val context: Context) {
     private val pauseGate = ConditionVariable(false)
 
     @Volatile private var pcmBytes: ByteArray? = null
+    @Volatile private var pcmBuffer: ByteBuffer? = null
     @Volatile private var sampleRate: Int = 44100
     @Volatile private var channels: Int = 2
     @Volatile private var bytesPerFrame: Int = 4
@@ -81,6 +86,29 @@ class RustAudioPlayer(private val context: Context) {
 
     fun setOnCompletionListener(listener: (() -> Unit)?) { onCompletion = listener }
     fun setOnErrorListener(listener: ((Throwable) -> Unit)?) { onError = listener }
+
+    fun setVolume(volume: Float) {
+        try {
+            audioTrack?.setVolume(volume.coerceIn(0f, 1f))
+        } catch (_: Throwable) {}
+    }
+
+    fun setPlaybackParams(speed: Float, pitch: Float = 1f) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val track = audioTrack ?: return
+            val params = track.playbackParams ?: PlaybackParams()
+            params.speed = speed.coerceIn(0.25f, 4f)
+            params.pitch = pitch.coerceIn(0.5f, 2f)
+            track.playbackParams = params
+        } catch (_: Throwable) {}
+    }
+
+    fun setPreferredDevice(device: AudioDeviceInfo?) {
+        try {
+            audioTrack?.preferredDevice = device
+        } catch (_: Throwable) {}
+    }
 
     private fun resolveToFilePath(input: String): String? {
         return try {
@@ -122,10 +150,14 @@ class RustAudioPlayer(private val context: Context) {
         val sizeCheck = getFileSize(resolved, context)
         if (sizeCheck != null && sizeCheck > MAX_RUST_FILE_BYTES) return false
         val info = CitoleEngine.getInfoSafe(resolved)
-        val pcm = CitoleEngine.decodeToPcmSafe(resolved) ?: return false
-        if (pcm.isEmpty()) return false
         val sr = info?.sampleRate ?: 44100
         val ch = info?.channels ?: 2
+        val direct = try { CitoleEngine.decodeToPcmDirect(resolved) } catch (_: Throwable) { null }
+        if (direct != null && direct.remaining() > 0 && ch in 1..2) {
+            return playDirectInternal(direct, sr, ch)
+        }
+        val pcm = CitoleEngine.decodeToPcmSafe(resolved) ?: return false
+        if (pcm.isEmpty()) return false
         return playPcm(pcm, sr, ch)
     }
 
@@ -135,46 +167,37 @@ class RustAudioPlayer(private val context: Context) {
             sampleRate = if (sr > 0) sr else 44100
             channels = if (ch in 1..8) ch else 2
             bytesPerFrame = channels * 2
-            val frames = if (bytesPerFrame > 0) pcm.size / bytesPerFrame else 0
+            var frames = if (bytesPerFrame > 0) pcm.size / bytesPerFrame else 0
+            var actualPcm = pcm
+            var actualChannels = channels
+            if (channels != 1 && channels != 2) {
+                actualPcm = remixToStereo(pcm, channels)
+                actualChannels = 2
+                bytesPerFrame = 4
+                frames = actualPcm.size / bytesPerFrame
+            }
             durationMs = if (sampleRate > 0) frames * 1000L / sampleRate else 0L
-            pcmBytes = pcm
+            pcmBytes = actualPcm
+            pcmBuffer = null
+            channels = actualChannels
             positionMsAtomic.set(0L)
             seekRequestMs = -1L
             stopFlag.set(false)
             pauseFlag.set(false)
             pauseGate.open()
-            val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
-            val actualChannels = if (channels == 1) 1 else 2
-            val actualPcm = if (channels != 1 && channels != 2) remixToStereo(pcm, channels) else pcm
-            if (channels != 1 && channels != 2) {
-                bytesPerFrame = 4
-                pcmBytes = actualPcm
-                this.channels = 2
+            val track = createTrack(sampleRate, actualChannels) ?: return false
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                try { track.release() } catch (_: Throwable) {}
+                return false
             }
-            val minBuf = AudioTrack.getMinBufferSize(sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT)
-            val bufSize = maxOf(minBuf * 2, CHUNK_BYTES * 4)
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-            val fmt = AudioFormat.Builder()
-                .setSampleRate(sampleRate)
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .setChannelMask(channelConfig)
-                .build()
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(attrs)
-                .setAudioFormat(fmt)
-                .setBufferSizeInBytes(bufSize)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
             audioTrack = track
+            try { track.preferredDevice = null } catch (_: Throwable) {}
             track.play()
             isPlaying = true
-            val bytes = pcmBytes ?: actualPcm
+            val bytes = actualPcm
+            val total = bytes.size
             playbackThread = thread(start = true, name = "RustAudioPlayer") {
                 var offset = 0
-                val total = bytes.size
                 try {
                     while (offset < total && !stopFlag.get()) {
                         if (pauseFlag.get()) {
@@ -221,6 +244,110 @@ class RustAudioPlayer(private val context: Context) {
         }
     }
 
+    private fun playDirectInternal(buffer: ByteBuffer, sr: Int, ch: Int): Boolean {
+        stop()
+        return try {
+            sampleRate = if (sr > 0) sr else 44100
+            channels = if (ch in 1..2) ch else 2
+            bytesPerFrame = channels * 2
+            buffer.rewind()
+            val total = buffer.remaining()
+            val frames = if (bytesPerFrame > 0) total / bytesPerFrame else 0
+            durationMs = if (sampleRate > 0) frames * 1000L / sampleRate else 0L
+            pcmBuffer = buffer
+            pcmBytes = null
+            positionMsAtomic.set(0L)
+            seekRequestMs = -1L
+            stopFlag.set(false)
+            pauseFlag.set(false)
+            pauseGate.open()
+            val track = createTrack(sampleRate, channels) ?: return false
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                try { track.release() } catch (_: Throwable) {}
+                return false
+            }
+            audioTrack = track
+            try { track.preferredDevice = null } catch (_: Throwable) {}
+            track.play()
+            isPlaying = true
+            playbackThread = thread(start = true, name = "RustAudioPlayer") {
+                var offset = 0
+                try {
+                    while (offset < total && !stopFlag.get()) {
+                        if (pauseFlag.get()) {
+                            pauseGate.block()
+                            if (stopFlag.get()) break
+                        }
+                        val seek = seekRequestMs
+                        if (seek >= 0) {
+                            seekRequestMs = -1L
+                            val targetFrame = (seek * sampleRate / 1000L).coerceIn(0L, frames.toLong())
+                            offset = (targetFrame * bytesPerFrame).toInt().coerceIn(0, total)
+                            positionMsAtomic.set(targetFrame * 1000L / sampleRate)
+                            try { buffer.position(offset) } catch (_: Throwable) {}
+                        }
+                        val remaining = total - offset
+                        if (remaining <= 0) break
+                        val chunk = minOf(CHUNK_BYTES, remaining)
+                        buffer.position(offset)
+                        buffer.limit(offset + chunk)
+                        val written = track.write(buffer, chunk, AudioTrack.WRITE_BLOCKING)
+                        buffer.limit(total)
+                        if (written < 0) break
+                        if (written > 0) {
+                            offset += written
+                            val framesPlayed = offset / bytesPerFrame
+                            positionMsAtomic.set(framesPlayed * 1000L / sampleRate)
+                        } else {
+                            Thread.sleep(5)
+                        }
+                    }
+                    if (!stopFlag.get() && !pauseFlag.get()) {
+                        positionMsAtomic.set(durationMs)
+                    }
+                } catch (e: Throwable) {
+                    onError?.invoke(e)
+                } finally {
+                    try { track.stop() } catch (_: Throwable) {}
+                    isPlaying = false
+                    val completed = !stopFlag.get() && !pauseFlag.get() && offset >= total
+                    if (completed) onCompletion?.invoke()
+                }
+            }
+            true
+        } catch (e: Throwable) {
+            onError?.invoke(e)
+            stop()
+            false
+        }
+    }
+
+    private fun createTrack(sr: Int, ch: Int): AudioTrack? {
+        return try {
+            val channelConfig = if (ch == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+            val minBuf = AudioTrack.getMinBufferSize(sr, channelConfig, AudioFormat.ENCODING_PCM_16BIT)
+            val bufSize = maxOf(if (minBuf > 0) minBuf * 2 else CHUNK_BYTES * 4, CHUNK_BYTES * 4)
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            val fmt = AudioFormat.Builder()
+                .setSampleRate(sr)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(channelConfig)
+                .build()
+            val builder = AudioTrack.Builder()
+                .setAudioAttributes(attrs)
+                .setAudioFormat(fmt)
+                .setBufferSizeInBytes(bufSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            }
+            builder.build()
+        } catch (_: Throwable) { null }
+    }
+
     private fun remixToStereo(src: ByteArray, srcChannels: Int): ByteArray {
         if (srcChannels <= 2) return src
         val frames = src.size / (srcChannels * 2)
@@ -260,7 +387,11 @@ class RustAudioPlayer(private val context: Context) {
         val clamped = ms.coerceIn(0L, durationMs)
         seekRequestMs = clamped
         if (!isPlaying && !pauseFlag.get()) {
-            val frames = if (durationMs > 0) (pcmBytes?.size ?: 0) / bytesPerFrame else 0
+            val frames = when {
+                pcmBuffer != null -> (pcmBuffer?.capacity() ?: 0) / bytesPerFrame
+                pcmBytes != null -> (pcmBytes?.size ?: 0) / bytesPerFrame
+                else -> 0
+            }
             val targetFrame = (clamped * sampleRate / 1000L).coerceIn(0L, frames.toLong())
             positionMsAtomic.set(targetFrame * 1000L / sampleRate)
         }
@@ -282,6 +413,7 @@ class RustAudioPlayer(private val context: Context) {
         try { audioTrack?.release() } catch (_: Throwable) {}
         audioTrack = null
         pcmBytes = null
+        pcmBuffer = null
         isPlaying = false
         positionMsAtomic.set(0L)
         seekRequestMs = -1L

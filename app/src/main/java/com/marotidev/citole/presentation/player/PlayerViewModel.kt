@@ -1,27 +1,11 @@
-/*
-Copyright (C) <2026>  <Balint Maroti>
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-*/
-
 package com.marotidev.citole.presentation.player
 
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -30,6 +14,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
@@ -51,9 +37,9 @@ import com.marotidev.citole.engine.CitoleEngine
 import com.marotidev.citole.engine.RustAudioPlayer
 import com.materialkolor.ktx.themeColor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,9 +54,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import kotlin.collections.map
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.collections.plus
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -93,9 +77,24 @@ class PlayerViewModel @Inject constructor(
 
     var progress by mutableLongStateOf(0L)
 
-    private var player : MediaController? = null
+    private var player: MediaController? = null
     private var rustPlayer: RustAudioPlayer? = null
-    private var useRust: Boolean = false
+
+    private val _useRust = MutableStateFlow(false)
+    val useRust: StateFlow<Boolean> = _useRust.asStateFlow()
+
+    private val _currentFormat = MutableStateFlow<CitoleEngine.Format?>(null)
+    val currentFormat: StateFlow<CitoleEngine.Format?> = _currentFormat.asStateFlow()
+
+    private val _currentFormatLive = MutableLiveData<CitoleEngine.Format?>()
+    val currentFormatLive: LiveData<CitoleEngine.Format?> = _currentFormatLive
+
+    private val _rustDuration = MutableStateFlow(0L)
+    val rustDuration: StateFlow<Long> = _rustDuration.asStateFlow()
+
+    private val _duration = MutableStateFlow(0L)
+    val duration: StateFlow<Long> = _duration.asStateFlow()
+
     private var currentRustPath: String? = null
 
     var repeatMode by mutableIntStateOf(Player.REPEAT_MODE_OFF)
@@ -113,6 +112,8 @@ class PlayerViewModel @Inject constructor(
     )
 
     private var progressJob: Job? = null
+    private var rustHandler: Handler? = null
+    private var rustProgressRunnable: Runnable? = null
 
     private var systemPrimaryColor = Color.Cyan
 
@@ -174,7 +175,7 @@ class PlayerViewModel @Inject constructor(
             {
                 player = controllerFuture.get()
 
-                playing = if (useRust) rustPlayer?.isPlaying ?: false else player?.isPlaying ?: false
+                playing = if (_useRust.value) rustPlayer?.isPlaying ?: false else player?.isPlaying ?: false
                 if (playing) {
                     startProgressUpdate()
                 }
@@ -185,8 +186,26 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    private fun isStreaming(path: String): Boolean {
+        val l = path.lowercase()
+        return l.startsWith("http://") || l.startsWith("https://") || l.startsWith("rtsp://")
+    }
+
+    private fun getFileSize(path: String): Long? {
+        return try {
+            when {
+                path.startsWith("content://") -> application.contentResolver.openAssetFileDescriptor(Uri.parse(path), "r")?.use { it.length.takeIf { v -> v >= 0 } }
+                path.startsWith("file://") -> File(Uri.parse(path).path ?: path).let { if (it.exists()) it.length() else null }
+                else -> File(path).let { if (it.exists()) it.length() else null }
+            }
+        } catch (_: Throwable) { null }
+    }
+
     private fun shouldUseRust(path: String): Boolean {
         if (!CitoleEngine.isAvailable()) return false
+        if (isStreaming(path)) return false
+        val size = getFileSize(path)
+        if (size != null && size >= 64L * 1024L * 1024L) return false
         val fmt = CitoleEngine.probeFormatSafe(path)
         return RustAudioPlayer.canHandle(fmt, path, application)
     }
@@ -196,8 +215,15 @@ class PlayerViewModel @Inject constructor(
     private fun playViaRust(path: String, index: Int): Boolean {
         val ok = rustPlayer?.play(path) ?: false
         if (ok) {
-            useRust = true
+            _useRust.value = true
             currentRustPath = path
+            val fmt = CitoleEngine.probeFormatSafe(path)
+            _currentFormat.value = fmt
+            _currentFormatLive.postValue(fmt)
+            val info = CitoleEngine.getInfoSafe(path)
+            val dur = info?.durationSecs?.let { (it * 1000).toLong() } ?: rustPlayer?.duration ?: 0L
+            _rustDuration.value = dur
+            _duration.value = dur
             playbackStateHolder.currentIndex.value = index
             playbackStateHolder.currentlyPlaying.value = playerQueue.value.getOrNull(index)
                 ?: generatedQueue.value.getOrNull(index - playerQueue.value.size)
@@ -208,8 +234,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun playViaExo(tracks: List<AudioService.TrackData>, startIndex: Int, startPosition: Long) {
-        useRust = false
+        _useRust.value = false
+        _currentFormat.value = tracks.getOrNull(startIndex)?.let { CitoleEngine.probeFormatSafe(trackPath(it)) }
+        _currentFormatLive.postValue(_currentFormat.value)
+        _rustDuration.value = 0L
+        _duration.value = tracks.getOrNull(startIndex)?.duration ?: 0L
         rustPlayer?.stop()
+        stopRustHandler()
         val mediaItems = tracks.map { with(audioService) { it.toMediaItem() } }
         player?.setMediaItems(mediaItems, startIndex, startPosition)
         player?.prepare()
@@ -250,6 +281,12 @@ class PlayerViewModel @Inject constructor(
                     updateColorFromAlbumArt(artworkUri, application)
                 }
         }
+
+        viewModelScope.launch {
+            _useRust.collect { isRust ->
+                if (isRust) _currentFormatLive.postValue(_currentFormat.value)
+            }
+        }
     }
 
 
@@ -262,16 +299,45 @@ class PlayerViewModel @Inject constructor(
 
     private fun startProgressUpdate() {
         progressJob?.cancel()
-        progressJob = viewModelScope.launch {
-            while (NonCancellable.isActive) {
-                progress = if (useRust) rustPlayer?.currentPosition ?: 0L else player?.currentPosition ?: 0L
-                delay(500.milliseconds)
+        stopRustHandler()
+        if (_useRust.value) {
+            val handler = Handler(Looper.getMainLooper())
+            rustHandler = handler
+            val runnable = object : Runnable {
+                override fun run() {
+                    progress = rustPlayer?.currentPosition ?: 0L
+                    _duration.value = rustPlayer?.duration ?: _rustDuration.value
+                    handler.postDelayed(this, 50)
+                }
+            }
+            rustProgressRunnable = runnable
+            handler.post(runnable)
+            progressJob = viewModelScope.launch {
+                while (true) {
+                    delay(50.milliseconds)
+                    if (!_useRust.value) break
+                }
+            }
+        } else {
+            progressJob = viewModelScope.launch {
+                while (true) {
+                    progress = player?.currentPosition ?: 0L
+                    player?.duration?.let { if (it > 0) _duration.value = it }
+                    delay(200.milliseconds)
+                }
             }
         }
     }
 
+    private fun stopRustHandler() {
+        rustHandler?.removeCallbacks(rustProgressRunnable ?: return)
+        rustHandler = null
+        rustProgressRunnable = null
+    }
+
     private fun stopProgressUpdate() {
         progressJob?.cancel()
+        stopRustHandler()
     }
 
     fun playQueue(tracks: List<AudioService.TrackData>, startIndex: Int = 0, startPosition: Long = 0,
@@ -295,7 +361,10 @@ class PlayerViewModel @Inject constructor(
                     val mediaItems = tracks.map { with(audioService) { it.toMediaItem() } }
                     try { player?.setMediaItems(mediaItems, startIndex, 0) } catch (_: Throwable) {}
                 }
-                if (startPosition > 0) rustPlayer?.seekTo(startPosition)
+                if (startPosition > 0) {
+                    rustPlayer?.seekTo(startPosition)
+                    progress = startPosition
+                }
                 return
             }
         }
@@ -409,8 +478,11 @@ class PlayerViewModel @Inject constructor(
             val ok = playViaRust(path, newIndex)
             if (ok) return
         }
-        useRust = false
+        _useRust.value = false
+        _currentFormat.value = item?.let { CitoleEngine.probeFormatSafe(trackPath(it.track)) }
+        _currentFormatLive.postValue(_currentFormat.value)
         rustPlayer?.stop()
+        stopRustHandler()
         player?.seekTo(newIndex, 0L)
         player?.play()
         playing = true
@@ -419,8 +491,6 @@ class PlayerViewModel @Inject constructor(
 
     fun skipToGeneratedInQueue(item: QueueItem) {
         viewModelScope.launch {
-            //move it to the player queue
-
             playbackStateHolder.generatedQueue.update { currentQueue ->
                 currentQueue.filterNot { it.id == item.id }
             }
@@ -428,7 +498,6 @@ class PlayerViewModel @Inject constructor(
                 currentQueue + item.copy(isGenerated = false)
             }
 
-            //add the selected track and skip to it
             with (audioService) {
                 player?.addMediaItem(item.track.toMediaItem())
             }
@@ -436,7 +505,6 @@ class PlayerViewModel @Inject constructor(
 
             delay(1000.milliseconds)
 
-            //remake the generated queue
             val newTracks = recommendationRepository.extendQueue(playerQueue.value.map {queueItem -> queueItem.track.id }, 12)
 
             playbackStateHolder.generatedQueue.update {
@@ -487,7 +555,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun togglePlayPause() {
-        if (useRust) {
+        if (_useRust.value) {
             if (rustPlayer?.isPlaying == true) {
                 rustPlayer?.pause()
                 playing = false
@@ -507,16 +575,17 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun seekTo(position: Long) {
-        if (useRust) {
-            rustPlayer?.seekTo(position)
+        val clamped = position.coerceIn(0L, _duration.value.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        if (_useRust.value) {
+            rustPlayer?.seekTo(clamped)
         } else {
-            player?.seekTo(position)
+            player?.seekTo(clamped)
         }
-        progress = position
+        progress = clamped
     }
 
     fun skipNext() {
-        if (useRust) {
+        if (_useRust.value) {
             val next = playbackStateHolder.currentIndex.value + 1
             if (next < playerQueue.value.size || next < playerQueue.value.size + generatedQueue.value.size) skipInQueue(next)
             progress = 0
@@ -529,7 +598,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun skipPrevious() {
-        if (useRust) {
+        if (_useRust.value) {
             val prev = (playbackStateHolder.currentIndex.value - 1).coerceAtLeast(0)
             skipInQueue(prev)
             progress = 0
@@ -549,7 +618,11 @@ class PlayerViewModel @Inject constructor(
         progress = 0
         playbackStateHolder.currentIndex.value = 0
         playbackStateHolder.currentlyPlaying.value = null
-        useRust = false
+        _useRust.value = false
+        _currentFormat.value = null
+        _currentFormatLive.postValue(null)
+        _rustDuration.value = 0L
+        _duration.value = 0L
         currentRustPath = null
         rustPlayer?.stop()
         player?.stop()
@@ -560,6 +633,7 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        stopProgressUpdate()
         rustPlayer?.release()
         rustPlayer = null
         player?.release()

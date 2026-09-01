@@ -1,9 +1,7 @@
 package com.marotidev.citole.engine
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.intOrNull
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicBoolean
 
 object CitoleEngine {
 
@@ -43,53 +41,118 @@ object CitoleEngine {
         val rawJson: String
     )
 
-    private var nativeAvailable: Boolean = false
+    companion object {
+        private val libLoaded = AtomicBoolean(false)
+        @Volatile private var libOk = false
+
+        init {
+            ensureLoaded()
+        }
+
+        private fun ensureLoaded() {
+            if (libLoaded.compareAndSet(false, true)) {
+                libOk = try {
+                    System.loadLibrary("citole_engine")
+                    true
+                } catch (_: UnsatisfiedLinkError) {
+                    false
+                } catch (_: SecurityException) {
+                    false
+                }
+            }
+        }
+
+        internal fun isLibOk(): Boolean = libOk
+    }
 
     init {
-        nativeAvailable = try {
-            System.loadLibrary("citole_engine")
-            true
-        } catch (_: UnsatisfiedLinkError) {
-            false
-        } catch (_: SecurityException) {
+        isLibOk()
+    }
+
+    @JvmName("isAvailable")
+    @JvmStatic
+    private external fun nativeIsAvailable(): Boolean
+
+    @JvmName("probeFormat")
+    @JvmStatic
+    private external fun nativeProbeFormat(path: String): Int
+
+    @JvmName("decodeToPcm")
+    @JvmStatic
+    private external fun nativeDecodeToPcm(path: String): ByteArray?
+
+    @JvmName("decodeToPcmDirect")
+    @JvmStatic
+    private external fun nativeDecodeToPcmDirect(path: String): ByteBuffer?
+
+    @JvmName("getInfo")
+    @JvmStatic
+    private external fun nativeGetInfo(path: String): String?
+
+    @JvmName("isAvailableWrapper")
+    fun isAvailable(): Boolean {
+        if (!isLibOk()) return false
+        return try {
+            nativeIsAvailable()
+        } catch (_: Throwable) {
             false
         }
     }
 
-    fun isAvailable(): Boolean = nativeAvailable
-
-    @JvmStatic
-    external fun probeFormat(path: String): Int
-
-    @JvmStatic
-    external fun decodeToPcm(path: String): ByteArray?
-
-    @JvmStatic
-    external fun getInfo(path: String): String?
+    @JvmName("probeFormatTyped")
+    fun probeFormat(path: String): Format? {
+        if (!isAvailable()) {
+            val f = probeFallback(path)
+            return f.takeIf { it != Format.Unknown }
+        }
+        return try {
+            val ord = nativeProbeFormat(path)
+            val f = Format.fromOrdinal(ord)
+            if (f == Format.Unknown) probeFallback(path).takeIf { it != Format.Unknown } else f
+        } catch (_: Throwable) {
+            probeFallback(path).takeIf { it != Format.Unknown }
+        }
+    }
 
     fun probeFormatSafe(path: String): Format {
-        if (!nativeAvailable) return probeFallback(path)
-        return try {
-            val ord = probeFormat(path)
-            Format.fromOrdinal(ord)
-        } catch (_: Throwable) {
-            probeFallback(path)
-        }
+        return probeFormat(path) ?: probeFallback(path)
     }
 
-    fun decodeToPcmSafe(path: String): ByteArray? {
-        if (!nativeAvailable) return null
+    @JvmName("decodeToPcmDirectWrapper")
+    fun decodeToPcmDirect(path: String): ByteBuffer? {
+        if (!isAvailable()) return null
         return try {
-            decodeToPcm(path)
+            val buf = nativeDecodeToPcmDirect(path)
+            if (buf != null && buf.remaining() > 0) buf else null
         } catch (_: Throwable) {
             null
         }
     }
 
-    fun getInfoSafe(path: String): TrackInfo? {
-        if (!nativeAvailable) return fallbackInfo(path)
+    fun decodeToPcmSafe(path: String): ByteArray? {
+        if (!isAvailable()) return null
         return try {
-            val json = getInfo(path) ?: return fallbackInfo(path)
+            nativeDecodeToPcm(path)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    @JvmName("getTrackInfoWrapper")
+    fun getTrackInfo(path: String): TrackInfo? {
+        if (!isAvailable()) return fallbackInfo(path).takeIf { it.format != Format.Unknown }
+        return try {
+            val json = nativeGetInfo(path) ?: return fallbackInfo(path).takeIf { it.format != Format.Unknown }
+            parseInfo(json, path)
+        } catch (_: Throwable) {
+            fallbackInfo(path).takeIf { it.format != Format.Unknown }
+        }
+    }
+
+    fun getInfoSafe(path: String): TrackInfo? {
+        if (!isAvailable()) return fallbackInfo(path)
+        return try {
+            val json = nativeGetInfo(path) ?: return fallbackInfo(path)
             parseInfo(json, path)
         } catch (_: Throwable) {
             fallbackInfo(path)
@@ -115,22 +178,58 @@ object CitoleEngine {
 
     private fun fallbackInfo(path: String): TrackInfo {
         val fmt = probeFallback(path)
-        val json = """{"path":"$path","format":"${fmt.name}","ordinal":${fmt.ordinalValue}}"""
+        val esc = path.replace("\\", "\\\\").replace("\"", "\\\"")
+        val json = """{"path":"$esc","format":"${fmt.name}","ordinal":${fmt.ordinalValue}}"""
         return TrackInfo(fmt, null, null, null, null, json)
     }
 
     private fun parseInfo(json: String, path: String): TrackInfo {
         return try {
-            val obj = Json.parseToJsonElement(json) as? JsonObject
-            val ord = obj?.get("ordinal")?.jsonPrimitive?.intOrNull ?: -1
-            val fmt = Format.fromOrdinal(ord)
-            val sr = obj?.get("sampleRate")?.jsonPrimitive?.intOrNull
-            val ch = obj?.get("channels")?.jsonPrimitive?.intOrNull
-            val frames = obj?.get("frames")?.jsonPrimitive?.content?.toLongOrNull()
-            val dur = obj?.get("durationSecs")?.jsonPrimitive?.content?.toDoubleOrNull()
+            val ord = extractInt(json, "ordinal") ?: -1
+            val fmt = Format.fromOrdinal(ord).let { if (it == Format.Unknown) probeFallback(path) else it }
+            val sr = extractInt(json, "sampleRate")
+            val ch = extractInt(json, "channels")
+            val frames = extractLong(json, "frames")
+            val dur = extractDouble(json, "durationSecs")
             TrackInfo(fmt, sr, ch, frames, dur, json)
         } catch (_: Exception) {
             TrackInfo(Format.Unknown, null, null, null, null, json)
         }
+    }
+
+    private fun extractInt(json: String, key: String): Int? {
+        val v = extractNumberString(json, key) ?: return null
+        if (v == "null") return null
+        return v.toIntOrNull()
+    }
+
+    private fun extractLong(json: String, key: String): Long? {
+        val v = extractNumberString(json, key) ?: return null
+        if (v == "null") return null
+        return v.toLongOrNull()
+    }
+
+    private fun extractDouble(json: String, key: String): Double? {
+        val v = extractNumberString(json, key) ?: return null
+        if (v == "null") return null
+        return v.toDoubleOrNull()
+    }
+
+    private fun extractNumberString(json: String, key: String): String? {
+        val idx = json.indexOf("\"$key\"")
+        if (idx == -1) return null
+        var colon = json.indexOf(':', idx + key.length + 2)
+        if (colon == -1) return null
+        colon++
+        while (colon < json.length && json[colon].isWhitespace()) colon++
+        if (colon >= json.length) return null
+        if (json.startsWith("null", colon)) return "null"
+        val start = colon
+        var end = start
+        while (end < json.length && (json[end].isDigit() || json[end] == '-' || json[end] == '+' || json[end] == '.' || json[end] == 'e' || json[end] == 'E')) {
+            end++
+        }
+        if (start == end) return null
+        return json.substring(start, end)
     }
 }
