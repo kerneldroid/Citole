@@ -115,7 +115,7 @@ tasks.register<Exec>("cargoBuild") {
         """
         set -e
         if command -v cargo-ndk >/dev/null 2>&1; then
-          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o ${'$'}PWD/../app/src/main/jniLibs build --release
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ${'$'}PWD/../app/src/main/jniLibs build --release
         else
           cargo build --release --target aarch64-linux-android --manifest-path ${'$'}PWD/Cargo.toml
           mkdir -p ${'$'}PWD/../app/src/main/jniLibs/arm64-v8a

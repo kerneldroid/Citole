@@ -64,7 +64,7 @@ jobs:
           rustup default stable
 
       - name: Add Android targets
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 
       - name: Install cargo-ndk
         run: |
@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Build APK
-        run: ./gradlew assembleDebug --build-cache --parallel --configuration-cache
+        run: ./gradlew assembleDebug --build-cache --parallel
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
 
